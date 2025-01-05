@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robot Karel</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        textarea {
+            width: 300px;
+            height: 100px;
+            margin-bottom: 10px;
+        }
+        button {
+            margin-right: 5px;
+            padding: 5px 10px;
+            font-size: 14px;
+        }
+        ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <textarea id="commandsInput" placeholder="Zadej příkazy... (např. KROK 3, POLOZ red, VPRAVOBOK)"></textarea><br>
+        <button id="runCommands">Proveď</button>
+        <button id="reset">Reset</button>
+        <p><strong>Možné příkazy:</strong></p>
+        <ul>
+            <li><strong>KROK</strong> - Karel se posune (např. KROK 3)</li>
+            <li><strong>VLEVOBOK</strong> - Otočí se doleva</li>
+            <li><strong>VPRAVOBOK</strong> - Otočí se doprava</li>
+            <li><strong>POLOZ</strong> - Položí položku (např. POLOZ red)</li>
+        </ul>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script>
+        // === Nastavení scény, kamery a rendereru ===
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        camera.position.set(20, 30, 40);
+        camera.lookAt(0, 0, 0);
+
+        // === Světla ===
+        const light = new THREE.PointLight(0xffffff, 1, 100);
+        light.position.set(10, 20, 10);
+        scene.add(light);
+        const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+        scene.add(ambientLight);
+
+        // === Šachovnice ===
+        const BOARD_SIZE = 8;
+        const TILE_SIZE = 5;
+        const board = new THREE.Group();
+        for (let x = 0; x < BOARD_SIZE; x++) {
+            for (let z = 0; z < BOARD_SIZE; z++) {
+                const tileColor = (x + z) % 2 === 0 ? 0xeeeeee : 0x555555;
+                const tile = new THREE.Mesh(
+                    new THREE.BoxGeometry(TILE_SIZE, 0.2, TILE_SIZE),
+                    new THREE.MeshStandardMaterial({ color: tileColor })
+                );
+                tile.position.set(x * TILE_SIZE, 0, z * TILE_SIZE);
+                board.add(tile);
+            }
+        }
+        board.position.set(-(BOARD_SIZE * TILE_SIZE) / 2, 0, -(BOARD_SIZE * TILE_SIZE) / 2);
+        scene.add(board);
+
+        // === Robot Karel ===
+        const robot = new THREE.Group();
+
+        const body = new THREE.Mesh(
+            new THREE.CylinderGeometry(1.5, 1.5, 4, 32),
+            new THREE.MeshStandardMaterial({ color: 0x0077cc })
+        );
+        robot.add(body);
+
+        const head = new THREE.Mesh(
+            new THREE.SphereGeometry(1.2, 32, 32),
+            new THREE.MeshStandardMaterial({ color: 0xffcc00 })
+        );
+        head.position.y = 3;
+        robot.add(head);
+
+        const arrow = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.3, 1, 3, 32),
+            new THREE.MeshStandardMaterial({ color: 0xff0000 })
+        );
+        arrow.position.y = 5;
+        arrow.rotation.z = Math.PI / 2;
+        robot.add(arrow);
+
+        scene.add(robot);
+
+        // === Stav robota ===
+        let robotPosition = { x: 0, z: 0 };
+        let robotDirection = 1; // 0 = východ, 1 = jih, 2 = západ, 3 = sever
+        
+        function updateRobotPosition() {
+    const xPos = (robotPosition.x - (BOARD_SIZE / 2)) * TILE_SIZE;
+    const zPos = (robotPosition.z - (BOARD_SIZE / 2)) * TILE_SIZE;
+    robot.position.set(xPos, 2, zPos); // Přesun na novou pozici
+    robot.rotation.y = robotDirection * Math.PI / 2; // Natočení podle směru
+}
+
+        updateRobotPosition();
+
+        // === Položené položky ===
+        const placedItems = [];
+
+        function moveRobot(steps = 1) {
+    for (let i = 0; i < steps; i++) {
+        setTimeout(() => {
+            if (robotDirection === 0 && robotPosition.x < BOARD_SIZE - 1) {
+                robotPosition.x++; // Pohyb doprava (východ)
+            } else if (robotDirection === 1 && robotPosition.z < BOARD_SIZE - 1) {
+                robotPosition.z++; // Pohyb dolů (jih)
+            } else if (robotDirection === 2 && robotPosition.x > 0) {
+                robotPosition.x--; // Pohyb doleva (západ)
+            } else if (robotDirection === 3 && robotPosition.z > 0) {
+                robotPosition.z--; // Pohyb nahoru (sever)
+            }
+            updateRobotPosition();
+        }, i * 300);
+    }
+}
+
+
+        function rotateRobotLeft(times = 1) {
+            for (let i = 0; i < times; i++) {
+                setTimeout(() => {
+                    robotDirection = (robotDirection + 3) % 4;
+                    updateRobotPosition();
+                }, i * 300);
+            }
+        }
+
+        function rotateRobotRight(times = 1) {
+    for (let i = 0; i < times; i++) {
+        setTimeout(() => {
+            robotDirection = (robotDirection + 1) % 4; // Otočení doprava
+            updateRobotPosition();
+        }, i * 300);
+    }
+}
+
+
+        function placeItem(color = "green") {
+            const placedItem = new THREE.Mesh(
+                new THREE.BoxGeometry(2, 0.5, 2),
+                new THREE.MeshStandardMaterial({ color: color.toLowerCase() })
+            );
+            placedItem.position.set(robot.position.x, 0.6, robot.position.z);
+            scene.add(placedItem);
+            placedItems.push(placedItem);
+        }
+
+        function resetBoard() {
+            robotPosition = { x: 0, z: 0 };
+            robotDirection = 1;
+            placedItems.forEach(item => scene.remove(item));
+            placedItems.length = 0;
+            updateRobotPosition();
+        }
+
+        // === Ovládání ===
+        const commandsInput = document.getElementById("commandsInput");
+        const runCommandsButton = document.getElementById("runCommands");
+        const resetButton = document.getElementById("reset");
+
+        runCommandsButton.addEventListener("click", () => {
+            const commands = commandsInput.value.split(/\n|\r/).map(c => c.trim().toUpperCase());
+            let delay = 0;
+
+            commands.forEach(command => {
+                const [cmd, arg] = command.split(" ");
+                switch (cmd) {
+                    case "KROK":
+                        setTimeout(() => moveRobot(arg ? parseInt(arg, 10) : 1), delay);
+                        delay += (arg ? parseInt(arg, 10) : 1) * 300;
+                        break;
+                    case "VLEVOBOK":
+                        setTimeout(() => rotateRobotLeft(arg ? parseInt(arg, 10) : 1), delay);
+                        delay += (arg ? parseInt(arg, 10) : 1) * 300;
+                        break;
+                    case "VPRAVOBOK":
+                        setTimeout(() => rotateRobotRight(arg ? parseInt(arg, 10) : 1), delay);
+                        delay += (arg ? parseInt(arg, 10) : 1) * 300;
+                        break;
+                    case "POLOZ":
+                        setTimeout(() => placeItem(arg || "green"), delay);
+                        delay += 300;
+                        break;
+                }
+            });
+        });
+
+        resetButton.addEventListener("click", resetBoard);
+
+        // === Animace ===
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        animate();
+    </script>
+</body>
+</html>
